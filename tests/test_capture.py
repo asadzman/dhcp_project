@@ -52,6 +52,23 @@ class CaptureTests(unittest.TestCase):
         self.cap.clear()
         self.assertEqual(self.cap.snapshot(), [])
 
+    def test_pcap_export(self):
+        import os
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".pcap", delete=False) as tf:
+            path = tf.name
+        try:
+            count = self.cap.export_pcap(path)
+            self.assertEqual(count, 2)
+            with open(path, "rb") as f:
+                header = f.read(24)
+            # Verify libpcap global magic 0xa1b2c3d4 and ethernet linktype 1
+            self.assertEqual(header[:4], b"\xa1\xb2\xc3\xd4")
+            self.assertEqual(header[20:24], b"\x00\x00\x00\x01")
+        finally:
+            if os.path.exists(path):
+                os.remove(path)
+
 
 if __name__ == "__main__":
     unittest.main()

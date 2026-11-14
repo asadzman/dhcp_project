@@ -84,6 +84,54 @@ class IntegrationTests(unittest.TestCase):
         self.assertFalse(c.renew())               # NAK
         self.assertEqual(c.state, INIT)
 
+    def test_hostname_saved_in_lease(self):
+        c = self.client(5, auto_renew=False)
+        self.assertTrue(c.obtain())
+        leases = self.server.pool.snapshot()
+        self.assertEqual(len(leases), 1)
+        self.assertEqual(leases[0].hostname, "PC5")
+
+    def test_dhcp_inform(self):
+        c = self.client(6, auto_renew=False)
+        self.assertTrue(c.inform("192.168.5.88"))
+        self.assertEqual(c.dns, "8.8.8.8")
+        self.assertEqual(c.domain_name, "lab.local")
+        # INFORM must not consume an address from the lease pool
+        self.assertEqual(len(self.server.pool.snapshot()), 0)
+
+    def test_arp_probe_conflict_triggers_auto_decline(self):
+        c = self.client(7, auto_renew=False)
+        # Simulate ARP conflict detection returning True (address is collision)
+        c.set_arp_checker(lambda ip: True)
+        self.assertFalse(c.obtain())
+        self.assertEqual(c.state, INIT)
+        time.sleep(0.1)
+        # Address should now be quarantined in server pool declined table
+        stats = self.server.pool.stats()
+        self.assertEqual(stats["declined"], 1)
+
+    def test_multiple_competing_servers_selection(self):
+        # Create a second competing DHCP server with a separate subnet
+        cfg2 = ServerConfig(server_ip="192.168.9.1", pool_start="192.168.9.10", pool_end="192.168.9.20",
+                            lease_time=4, port=0)
+        server2 = DhcpServer(cfg2)
+        server2.start()
+        try:
+            addr2 = ("127.0.0.1", server2.port)
+            # Client broadcasts DISCOVER to BOTH servers
+            c = DhcpClient("02:00:5e:00:00:99", "MultiClient",
+                           server_addr=[self.addr, addr2], timeout=0.5, retries=2, auto_renew=False)
+            self.assertTrue(c.obtain())
+            self.assertEqual(c.state, BOUND)
+            # One server must have granted the lease, and the unchosen server must have released its offer
+            srv1_leases = len(self.server.pool.snapshot())
+            srv2_leases = len(server2.pool.snapshot())
+            self.assertEqual(srv1_leases + srv2_leases, 1)
+            # Check that unchosen server did not hold onto a dangling offer
+            self.assertEqual(len(server2.pool.offers_snapshot()) if srv1_leases == 1 else len(self.server.pool.offers_snapshot()), 0)
+        finally:
+            server2.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

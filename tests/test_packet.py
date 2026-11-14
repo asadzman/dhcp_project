@@ -27,6 +27,13 @@ class PacketTests(unittest.TestCase):
         p = new_request_packet(1, "02:00:5e:00:00:01", MsgType.OFFER).set_ip(Opt.DNS, "1.1.1.1", "8.8.8.8")
         self.assertEqual(DhcpPacket.decode(p.encode()).get_ips(Opt.DNS), ["1.1.1.1", "8.8.8.8"])
 
+    def test_hostname_and_domain_options(self):
+        p = new_request_packet(123, "02:00:5e:11:22:33", MsgType.REQUEST, host_name="Lab-PC")
+        p.set_str(Opt.DOMAIN_NAME, "college.edu")
+        decoded = DhcpPacket.decode(p.encode())
+        self.assertEqual(decoded.host_name, "Lab-PC")
+        self.assertEqual(decoded.get_str(Opt.DOMAIN_NAME), "college.edu")
+
 
 if __name__ == "__main__":
     unittest.main()
