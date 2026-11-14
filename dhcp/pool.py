@@ -16,6 +16,7 @@ class Lease:
     start: float
     expiry: float
     static: bool = False
+    hostname: str = ""
 
     def remaining(self, now: float) -> int:
         return max(0, int(self.expiry - now))
@@ -56,7 +57,7 @@ class LeasePool:
         return any(rip == ip and rmac != mac for rmac, rip in self.reservations.items())
 
     # ---------- DHCP operations ----------
-    def offer(self, mac: str, requested: Optional[str] = None) -> Optional[str]:
+    def offer(self, mac: str, requested: Optional[str] = None, hostname: str = "") -> Optional[str]:
         """Pick an address for a DISCOVER and hold it for offer_hold seconds."""
         with self._lock:
             self._expire()
@@ -78,10 +79,10 @@ class LeasePool:
             if ip is None:
                 return None
             now = self.clock()
-            self.offers[mac] = Lease(mac, ip, now, now + self.offer_hold, mac in self.reservations)
+            self.offers[mac] = Lease(mac, ip, now, now + self.offer_hold, mac in self.reservations, hostname=hostname)
             return ip
 
-    def commit(self, mac: str, ip: str) -> Optional[Lease]:
+    def commit(self, mac: str, ip: str, hostname: str = "") -> Optional[Lease]:
         """Validate a REQUEST; return the new Lease (-> ACK) or None (-> NAK)."""
         with self._lock:
             self._expire()
@@ -97,7 +98,7 @@ class LeasePool:
                 return None
             self.offers.pop(mac, None)
             now = self.clock()
-            lease = Lease(mac, ip, now, now + self.lease_time, mac in self.reservations)
+            lease = Lease(mac, ip, now, now + self.lease_time, mac in self.reservations, hostname=hostname)
             self.leases[mac] = lease
             return lease
 

@@ -27,6 +27,9 @@ class Opt(IntEnum):
     SUBNET_MASK = 1
     ROUTER = 3
     DNS = 6
+    HOST_NAME = 12
+    DOMAIN_NAME = 15
+    BROADCAST_ADDR = 28
     REQUESTED_IP = 50
     LEASE_TIME = 51
     MSG_TYPE = 53

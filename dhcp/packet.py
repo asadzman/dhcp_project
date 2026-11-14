@@ -62,6 +62,23 @@ class DhcpPacket:
         raw = self.options.get(code)
         return struct.unpack("!I", raw)[0] if raw and len(raw) == 4 else None
 
+    def set_str(self, code: int, value: str) -> "DhcpPacket":
+        self.options[code] = value.encode("utf-8")
+        return self
+
+    def get_str(self, code: int) -> Optional[str]:
+        raw = self.options.get(code)
+        if raw is None:
+            return None
+        return raw.decode("utf-8", errors="replace").rstrip("\x00")
+
+    @property
+    def host_name(self) -> Optional[str]:
+        return self.get_str(Opt.HOST_NAME)
+
+    def set_host_name(self, name: str) -> "DhcpPacket":
+        return self.set_str(Opt.HOST_NAME, name)
+
     # ---------- wire format ----------
     def encode(self) -> bytes:
         hdr = _HDR.pack(self.op, HTYPE_ETHERNET, 6, self.hops, self.xid, self.secs, self.flags,
@@ -100,10 +117,12 @@ class DhcpPacket:
             t.name if t else "?", self.xid, self.chaddr, self.ciaddr, self.yiaddr)
 
 
-def new_request_packet(xid: int, mac: str, msg_type: MsgType) -> DhcpPacket:
+def new_request_packet(xid: int, mac: str, msg_type: MsgType, host_name: Optional[str] = None) -> DhcpPacket:
     pkt = DhcpPacket(BOOTREQUEST, xid, mac)
     pkt.set_msg_type(msg_type)
     pkt.options[Opt.CLIENT_ID] = b"\x01" + mac_to_bytes(mac)
+    if host_name:
+        pkt.set_host_name(host_name)
     return pkt
 
 

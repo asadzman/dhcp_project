@@ -14,6 +14,8 @@ class ServerConfig:
     subnet_mask: str = "255.255.255.0"
     router: str = "192.168.1.1"
     dns: List[str] = field(default_factory=lambda: ["8.8.8.8"])
+    domain_name: str = "lab.local"
+    broadcast_addr: str = "192.168.1.255"
     lease_time: int = 120                   # seconds
     offer_hold: int = 10                    # seconds an OFFER keeps its address reserved
     decline_hold: int = 60                  # seconds a DECLINEd address is quarantined
@@ -25,6 +27,8 @@ class ServerConfig:
         for name in ("server_ip", "pool_start", "pool_end", "subnet_mask", "router"):
             if not is_valid_ip(getattr(self, name)):
                 raise ValueError("invalid %s: %r" % (name, getattr(self, name)))
+        if self.broadcast_addr and not is_valid_ip(self.broadcast_addr):
+            raise ValueError("invalid broadcast_addr: %r" % self.broadcast_addr)
         if not self.dns or not all(is_valid_ip(d) for d in self.dns):
             raise ValueError("invalid DNS list")
         if ip_to_int(self.pool_start) > ip_to_int(self.pool_end):

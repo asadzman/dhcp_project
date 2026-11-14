@@ -88,6 +88,8 @@ class DhcpServer:
             return self._on_discover(pkt)
         if t == MsgType.REQUEST:
             return self._on_request(pkt)
+        if t == MsgType.INFORM:
+            return self._on_inform(pkt)
         if t == MsgType.RELEASE:
             if self.pool.release(pkt.chaddr):
                 self.log("SERVER: %s released %s" % (pkt.chaddr, pkt.ciaddr))
@@ -106,10 +108,15 @@ class DhcpServer:
         reply.set_ip(Opt.SUBNET_MASK, c.subnet_mask)
         reply.set_ip(Opt.ROUTER, c.router)
         reply.set_ip(Opt.DNS, *c.dns)
+        if c.domain_name:
+            reply.set_str(Opt.DOMAIN_NAME, c.domain_name)
+        if c.broadcast_addr:
+            reply.set_ip(Opt.BROADCAST_ADDR, c.broadcast_addr)
         return reply
 
     def _on_discover(self, pkt: DhcpPacket) -> Optional[DhcpPacket]:
-        ip = self.pool.offer(pkt.chaddr, pkt.get_ip(Opt.REQUESTED_IP))
+        hostname = pkt.host_name or ""
+        ip = self.pool.offer(pkt.chaddr, pkt.get_ip(Opt.REQUESTED_IP), hostname=hostname)
         if ip is None:
             self.log("SERVER: pool exhausted, no OFFER for %s" % pkt.chaddr)
             return None
@@ -119,9 +126,18 @@ class DhcpServer:
         sid = pkt.get_ip(Opt.SERVER_ID)
         if sid and sid != self.config.server_ip:
             self.pool.offers.pop(pkt.chaddr, None)        # client picked another server
+            self.log("SERVER: %s selected another server (%s) -> released held offer" % (pkt.chaddr, sid))
             return None
         ip = pkt.get_ip(Opt.REQUESTED_IP) or (pkt.ciaddr if pkt.ciaddr != "0.0.0.0" else None)
-        lease = self.pool.commit(pkt.chaddr, ip) if ip else None
+        hostname = pkt.host_name or ""
+        lease = self.pool.commit(pkt.chaddr, ip, hostname=hostname) if ip else None
         if lease is None:
             return new_reply_packet(pkt, MsgType.NAK, self.config.server_ip)
         return self._fill_config_options(new_reply_packet(pkt, MsgType.ACK, self.config.server_ip, lease.ip))
+
+    def _on_inform(self, pkt: DhcpPacket) -> Optional[DhcpPacket]:
+        # RFC 2131 Section 4.3.5: client has externally configured IP, wants parameters
+        reply = new_reply_packet(pkt, MsgType.ACK, self.config.server_ip, yiaddr="0.0.0.0")
+        reply.ciaddr = pkt.ciaddr
+        self.log("SERVER: INFORM from %s (%s) -> sending configuration parameters" % (pkt.chaddr, pkt.ciaddr))
+        return self._fill_config_options(reply)
