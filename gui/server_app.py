@@ -1,4 +1,6 @@
 """DHCP SERVER application: configuration, lease table and a Wireshark-style live capture."""
+import random
+import threading
 import time
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -42,11 +44,13 @@ class ServerApp:
         lt = ttk.Frame(nb)
         nb.add(lt, text="  Leases  ")
         self.table = make_table(lt, [("mac", "Client MAC", 150), ("ip", "IP address", 120),
-                                     ("left", "Expires in (s)", 100), ("kind", "State", 130)], height=10)
+                                     ("host", "Host Name", 110), ("left", "Expires in (s)", 90),
+                                     ("kind", "State", 110)], height=10)
         self.table.pack(fill="x", padx=6, pady=6)
         bar = ttk.Frame(lt)
         bar.pack(fill="x", padx=6)
         ttk.Button(bar, text="Revoke selected lease", command=self.revoke).pack(side="left")
+        ttk.Button(bar, text="Simulate Starvation Attack", command=self.simulate_starvation).pack(side="left", padx=8)
         ttk.Label(lt, text="Server events").pack(anchor="w", padx=6, pady=(10, 0))
         self.events = LogView(lt, height=12)
         self.events.pack(fill="both", expand=True, padx=6, pady=6)
@@ -62,6 +66,7 @@ class ServerApp:
                 ("Server identifier", "192.168.1.1", "sid"), ("Subnet mask", "255.255.255.0", "mask"),
                 ("Pool start", "192.168.1.100", "start"), ("Pool end", "192.168.1.110", "end"),
                 ("Default router", "192.168.1.1", "gw"), ("DNS servers (comma)", "8.8.8.8,1.1.1.1", "dns"),
+                ("Domain name", "lab.local", "domain"), ("Broadcast address", "192.168.1.255", "bcast"),
                 ("Lease time (s)", "30", "lease"), ("Offer hold (s)", "10", "hold"),
                 ("Reservations MAC=IP;MAC=IP", "", "resv")]
         for r, (label, default, key) in enumerate(rows):
@@ -85,8 +90,12 @@ class ServerApp:
         try:
             f = {k: e.get().strip() for k, e in self.f.items()}
             resv = dict(x.split("=") for x in f["resv"].split(";") if x.strip())
-            cfg = ServerConfig(f["sid"], f["start"], f["end"], f["mask"], f["gw"],
-                               [d.strip() for d in f["dns"].split(",")], int(f["lease"]), int(f["hold"]),
+            cfg = ServerConfig(server_ip=f["sid"], pool_start=f["start"], pool_end=f["end"],
+                               subnet_mask=f["mask"], router=f["gw"],
+                               dns=[d.strip() for d in f["dns"].split(",") if d.strip()],
+                               domain_name=f.get("domain", "lab.local"),
+                               broadcast_addr=f.get("bcast", "192.168.1.255"),
+                               lease_time=int(f["lease"]), offer_hold=int(f["hold"]),
                                reservations=resv, host=f["host"], port=int(f["port"]))
             self.server = DhcpServer(cfg, self.log, self.capture)
             self.server.start()
@@ -96,6 +105,28 @@ class ServerApp:
         self.btn.config(text="Stop server")
         self.dot.config(fg="#0a0")
         self.status.config(text="Listening on UDP %s:%d" % (cfg.host, cfg.port))
+
+    def simulate_starvation(self):
+        if not self.server or not self.server.running:
+            return messagebox.showwarning("Starvation Demo", "Please start the server first.")
+
+        def _flood():
+            import socket
+            from dhcp.constants import MsgType
+            from dhcp.packet import new_request_packet
+            from dhcp.utils import random_mac
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            srv_addr = (self.server.config.host, self.server.port)
+            self.log("DEMO: Launching simulated DHCP starvation attack (20 rapid DISCOVERs)...")
+            for i in range(20):
+                mac = random_mac()
+                pkt = new_request_packet(random.getrandbits(32), mac, MsgType.DISCOVER, host_name=f"Attacker-{i+1}")
+                sock.sendto(pkt.encode(), srv_addr)
+                time.sleep(0.04)
+            sock.close()
+            self.log("DEMO: Starvation flood completed. Check the pool exhaustion stats!")
+
+        threading.Thread(target=_flood, daemon=True).start()
 
     def revoke(self):
         sel = self.table.selection()
@@ -109,9 +140,10 @@ class ServerApp:
         self.events.pump()
         if self.server:
             now = time.time()
-            rows = [(l.mac, l.ip, l.remaining(now), "static lease" if l.static else "leased")
+            rows = [(l.mac, l.ip, l.hostname or "-", l.remaining(now), "static lease" if l.static else "leased")
                     for l in self.server.pool.snapshot()]
-            rows += [(l.mac, l.ip, l.remaining(now), "offered (pending)") for l in self.server.pool.offers_snapshot()]
+            rows += [(l.mac, l.ip, l.hostname or "-", l.remaining(now), "offered (pending)")
+                     for l in self.server.pool.offers_snapshot()]
             refill(self.table, rows)
             s = self.server.pool.stats()
             self.stats.config(text="Pool: %d / %d leased   |   %d offered   |   %d quarantined"
