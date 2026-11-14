@@ -8,7 +8,8 @@ from tkinter import filedialog, messagebox, ttk
 from dhcp.dissect import Node, ascii_col, dissect, hex_col, hex_lines
 
 COLORS = {"Discover": "#dbe9ff", "Offer": "#d8f5d0", "Request": "#fff1b8", "ACK": "#b9eeb9",
-          "NAK": "#ffc2c2", "Release": "#e3e3e3", "Decline": "#ffd6ad", "Inform": "#e6d6ff"}
+          "NAK": "#ffc2c2", "Release": "#e3e3e3", "Decline": "#ffd6ad", "Inform": "#e6d6ff",
+          "ARP": "#faf0d7"}
 COLUMNS = [("no", "No.", 50), ("time", "Time", 80), ("src", "Source", 120), ("dst", "Destination", 135),
            ("proto", "Protocol", 70), ("len", "Length", 60), ("info", "Info", 360)]
 
@@ -106,9 +107,9 @@ class CaptureView(ttk.Frame):
         return all(t in h for t in self._terms())
 
     def _insert(self, cp):
-        t = cp.type_name
+        t = cp.type_name if cp.proto != "ARP" else "ARP"
         self.lst.insert("", "end", iid=str(cp.no), tags=(t,),
-                        values=(cp.no, "%.6f" % cp.rel_time, cp.src, cp.dst, "DHCP", cp.length, cp.info))
+                        values=(cp.no, "%.6f" % cp.rel_time, cp.src, cp.dst, cp.proto, cp.length, cp.info))
         self._shown += 1
         if self.autoscroll.get():
             self.lst.see(str(cp.no))

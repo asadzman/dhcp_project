@@ -13,6 +13,7 @@ dependencies = []
 [project.scripts]
 dhcp-server = "gui.server_app:run"
 dhcp-client = "gui.client_app:run"
+dhcp-arp = "gui.arp_app:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["dhcp", "gui", "arp"]

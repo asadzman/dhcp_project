@@ -2,13 +2,14 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+from arp import ArpTable
 from dhcp import DhcpClient, EventLog, PacketCapture
 from dhcp.client import BOUND, INIT, REBINDING, REQUESTING, RENEWING, SELECTING
 from dhcp.constants import SERVER_PORT
 from dhcp.utils import is_valid_mac, random_mac
 
 from .capture_view import CaptureView
-from .widgets import LogView, labeled_entry
+from .widgets import LogView, labeled_entry, make_table, refill
 
 STATE_COLORS = {INIT: "#9aa0a6", SELECTING: "#3b78d8", REQUESTING: "#e0a800",
                 BOUND: "#1e9e4a", RENEWING: "#8e44ad", REBINDING: "#d35400"}
@@ -20,6 +21,7 @@ class ClientApp:
         root.title("DHCP Client")
         root.geometry("1100x780")
         self.capture, self.log = PacketCapture(), EventLog()
+        self.arp_table = ArpTable(default_ttl=300.0)
         self.client = None
 
         # ---- settings ----
@@ -79,6 +81,13 @@ class ClientApp:
         nb.pack(fill="both", expand=True, padx=8, pady=8)
         self.view = CaptureView(nb, self.capture)
         nb.add(self.view, text="  Packet Capture  ")
+
+        tab_arp = ttk.Frame(nb)
+        nb.add(tab_arp, text="  ARP Cache Table  ")
+        self.arp_view = make_table(tab_arp, [("ip", "IP Address", 140), ("mac", "MAC Address", 160),
+                                             ("type", "Type", 100), ("ttl", "TTL Remaining", 120)], height=10)
+        self.arp_view.pack(fill="both", expand=True, padx=6, pady=6)
+
         self.events = LogView(nb, height=12)
         nb.add(self.events, text="  Event log  ")
         self.log.subscribe(self.events.push)
@@ -180,6 +189,19 @@ class ClientApp:
             for v in self.vars.values():
                 v.set("-")
             self.bar["value"] = 0
+
+        now = time.time()
+        arp_rows = []
+        if c and c.ip:
+            if c.router and not self.arp_table.lookup(c.router):
+                self.arp_table.update(c.router, "02:00:5e:fe:00:01", static=True)
+            if c.server_id and not self.arp_table.lookup(c.server_id):
+                self.arp_table.update(c.server_id, "02:00:5e:fe:00:02", static=True)
+        for entry in self.arp_table.snapshot():
+            ttl_str = "Static (Permanent)" if entry.static else "%ds" % max(0, int(entry.ttl - (now - entry.updated_at)))
+            arp_rows.append((entry.ip, entry.mac, "Static" if entry.static else "Dynamic", ttl_str))
+        refill(self.arp_view, arp_rows)
+
         self.root.after(250, self._tick)
 
     def _close(self):

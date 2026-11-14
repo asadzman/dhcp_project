@@ -37,7 +37,7 @@ def _ip(b: bytes) -> str:
 
 
 def dissect(cp: CapturedPacket) -> List[Node]:
-    raw, p = cp.raw, cp.pkt
+    raw = cp.raw
     top: List[Node] = []
 
     fr = Node("Frame %d: %d bytes on wire (%d bits)   [emulated]" % (cp.no, cp.length, cp.length * 8))
@@ -47,6 +47,32 @@ def dissect(cp: CapturedPacket) -> List[Node]:
     fr.add("Capture direction: %s" % ("received" if cp.direction == "rx" else "sent"))
     fr.add("Real transport used by emulator: UDP %s:%d -> %s:%d" % (*cp.real_src, *cp.real_dst))
     top.append(fr)
+
+    if cp.proto == "ARP":
+        p = cp.pkt
+        is_req = (p.op == 1)
+        target_mac_display = "ff:ff:ff:ff:ff:ff (Broadcast)" if is_req else p.target_mac
+        eth = Node("Ethernet II, Src: %s, Dst: %s   [emulated]" % (p.sender_mac, target_mac_display))
+        eth.add("Destination: %s" % target_mac_display)
+        eth.add("Source: %s" % p.sender_mac)
+        eth.add("Type: ARP (0x0806)")
+        top.append(eth)
+
+        op_name = "request (1)" if is_req else ("reply (2)" if p.op == 2 else str(p.op))
+        arp = Node("Address Resolution Protocol (%s)" % ("request" if is_req else "reply"), 0, len(raw))
+        arp.add("Hardware type: Ethernet (1)", 0, 2)
+        arp.add("Protocol type: IPv4 (0x0800)", 2, 2)
+        arp.add("Hardware size: 6", 4, 1)
+        arp.add("Protocol size: 4", 5, 1)
+        arp.add("Opcode: %s" % op_name, 6, 2)
+        arp.add("Sender MAC address: %s" % p.sender_mac, 8, 6)
+        arp.add("Sender IP address: %s" % p.sender_ip, 14, 4)
+        arp.add("Target MAC address: %s" % p.target_mac, 18, 6)
+        arp.add("Target IP address: %s" % p.target_ip, 24, 4)
+        top.append(arp)
+        return top
+
+    p = cp.pkt
 
     ip = Node("Internet Protocol Version 4, Src: %s, Dst: %s   [emulated]" % (cp.src, cp.dst))
     ip.add("Source Address: %s" % cp.src)
