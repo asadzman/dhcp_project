@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dhcp-emulator"
+version = "0.1.0"
+description = "DHCP Emulator - GUI Server and GUI Client"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = []
+
+[project.scripts]
+dhcp-server = "gui.server_app:run"
+dhcp-client = "gui.client_app:run"
+
+[tool.hatch.build.targets.wheel]
+packages = ["dhcp", "gui"]
