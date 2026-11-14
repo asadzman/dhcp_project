@@ -11,7 +11,8 @@ from .capture import CapturedPacket
 from .constants import FIXED_HEADER_LEN, MAGIC_COOKIE, MsgType, Opt
 from .utils import bytes_to_mac
 
-OPT_NAMES = {1: "Subnet Mask", 3: "Router", 6: "Domain Name Server", 50: "Requested IP Address",
+OPT_NAMES = {1: "Subnet Mask", 3: "Router", 6: "Domain Name Server", 12: "Host Name",
+             15: "Domain Name", 28: "Broadcast Address", 50: "Requested IP Address",
              51: "IP Address Lease Time", 53: "DHCP Message Type", 54: "DHCP Server Identifier",
              55: "Parameter Request List", 58: "Renewal Time Value", 59: "Rebinding Time Value",
              61: "Client identifier", 255: "End"}
@@ -115,6 +116,11 @@ def dissect(cp: CapturedPacket) -> List[Node]:
         elif code == Opt.PARAM_REQUEST:
             for k, c in enumerate(val):
                 o.add("Parameter Request List Item: (%d) %s" % (c, OPT_NAMES.get(c, "Unknown")), v + k, 1)
+        elif code in (Opt.HOST_NAME, Opt.DOMAIN_NAME):
+            text = val.decode("utf-8", errors="replace")
+            o.add("%s: %s" % (name, text), v, ln)
+        elif code == Opt.BROADCAST_ADDR and len(val) == 4:
+            o.add("Broadcast Address: %s" % _ip(val), v, 4)
         elif code == Opt.CLIENT_ID and len(val) == 7:
             o.add("Hardware type: Ethernet (0x%02x)" % val[0], v, 1)
             o.add("Client MAC address: %s" % bytes_to_mac(val[1:]), v + 1, 6)

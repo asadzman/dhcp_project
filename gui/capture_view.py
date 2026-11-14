@@ -35,6 +35,7 @@ class CaptureView(ttk.Frame):
         ttk.Button(bar, text="Clear filter", command=lambda: (self.filter_var.set(""), self.rebuild())).pack(side="left", padx=2)
         ttk.Label(bar, text='e.g.  offer   02:00:5e   0x1a2b',
                   foreground="#666").pack(side="left", padx=6)
+        ttk.Button(bar, text="Export PCAP", command=self.export_pcap).pack(side="right", padx=2)
         ttk.Button(bar, text="Export CSV", command=self.export).pack(side="right", padx=2)
         ttk.Button(bar, text="Clear capture", command=self.clear).pack(side="right", padx=2)
         self.autoscroll = tk.BooleanVar(value=True)
@@ -171,6 +172,17 @@ class CaptureView(ttk.Frame):
         self.hex.config(state="disabled")
 
     # ---------- export ----------
+    def export_pcap(self):
+        path = filedialog.asksaveasfilename(defaultextension=".pcap",
+                                            filetypes=[("Wireshark PCAP", "*.pcap"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            n = self.capture.export_pcap(path)
+            messagebox.showinfo("Export PCAP", "Saved %d packet(s) to:\n%s\n\nYou can now open this file in Wireshark!" % (n, path))
+        except Exception as e:
+            messagebox.showerror("Export PCAP Error", str(e))
+
     def export(self):
         path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV", "*.csv")])
         if not path:
