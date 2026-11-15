@@ -73,6 +73,41 @@ class DhcpClient:
         s.settimeout(0.2)
         return s
 
+    def _collect_offers(self, sock: socket.socket, pkt: DhcpPacket) -> List[Tuple[DhcpPacket, Tuple[str, int]]]:
+        """Broadcast DISCOVER to all configured servers and collect competing offers (RFC 2131 §4.4.1)."""
+        offers: List[Tuple[DhcpPacket, Tuple[str, int]]] = []
+        for attempt in range(1, self.retries + 1):
+            raw = pkt.encode()
+            for srv in self.server_addrs:
+                sock.sendto(raw, srv)
+                self._cap(raw, sock, "tx", srv)
+            self.log("%s -> %s%s" % (self.name, pkt.summary(), "" if attempt == 1 else "  (retry %d)" % attempt))
+            deadline = time.time() + self.timeout
+            window_end: Optional[float] = None
+            while time.time() < deadline:
+                if window_end is not None and time.time() > window_end:
+                    break
+                try:
+                    data, src_addr = sock.recvfrom(4096)
+                except socket.timeout:
+                    continue
+                try:
+                    rep = DhcpPacket.decode(data)
+                except ValueError:
+                    continue
+                if rep.xid == pkt.xid and rep.msg_type == MsgType.OFFER:
+                    self._cap(data, sock, "rx", src_addr)
+                    sid = rep.get_ip(Opt.SERVER_ID) or src_addr[0]
+                    self.log("%s <- OFFER yiaddr=%s from server %s (%s:%d)" % (self.name, rep.yiaddr, sid, src_addr[0], src_addr[1]))
+                    offers.append((rep, src_addr))
+                    if len(offers) >= len(self.server_addrs):
+                        break
+                    if window_end is None and len(self.server_addrs) > 1:
+                        window_end = time.time() + 0.15
+            if offers:
+                break
+        return offers
+
     def _exchange(self, sock: socket.socket, pkt: DhcpPacket, want) -> Optional[DhcpPacket]:
         """Send pkt to all configured servers, wait for a matching reply; retransmit on timeout."""
         for attempt in range(1, self.retries + 1):
@@ -141,15 +176,24 @@ class DhcpClient:
             sock, xid = self._new_socket(), random.getrandbits(32)
             try:
                 self._set_state(SELECTING)
-                offer = self._exchange(sock, new_request_packet(xid, self.mac, MsgType.DISCOVER, host_name=self.name), {MsgType.OFFER})
-                if offer is None:
+                pkt = new_request_packet(xid, self.mac, MsgType.DISCOVER, host_name=self.name)
+                offers = self._collect_offers(sock, pkt)
+                if not offers:
                     self._set_state(INIT)
                     self.log("%s: no OFFER received (server down or pool exhausted)" % self.name)
                     return False
+                if len(offers) > 1:
+                    competing = ["%s (%s)" % (o.yiaddr, o.get_ip(Opt.SERVER_ID) or src[0]) for o, src in offers]
+                    chosen_offer, chosen_src = offers[0]
+                    chosen_sid = chosen_offer.get_ip(Opt.SERVER_ID) or chosen_src[0]
+                    self.log("%s: Received %d competing offers [%s] -> Selected %s via Option 54"
+                             % (self.name, len(offers), ", ".join(competing), chosen_sid))
+                else:
+                    chosen_offer, chosen_src = offers[0]
                 self._set_state(REQUESTING)
                 req = new_request_packet(xid, self.mac, MsgType.REQUEST, host_name=self.name)
-                req.set_ip(Opt.REQUESTED_IP, offer.yiaddr)
-                req.options[Opt.SERVER_ID] = offer.options[Opt.SERVER_ID]
+                req.set_ip(Opt.REQUESTED_IP, chosen_offer.yiaddr)
+                req.options[Opt.SERVER_ID] = chosen_offer.options[Opt.SERVER_ID]
                 rep = self._exchange(sock, req, {MsgType.ACK, MsgType.NAK})
                 if rep is None or rep.msg_type == MsgType.NAK:
                     self._set_state(INIT)

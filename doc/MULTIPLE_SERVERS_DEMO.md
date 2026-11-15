@@ -61,23 +61,33 @@ Our emulator supports multi-server simulation on loopback by specifying comma-se
    ```bash
    uv run run_client_gui.py
    ```
-2. In the **DHCP server (host:port)** input box, enter both servers separated by a comma:
-   ```
-   127.0.0.1:6767, 127.0.0.1:6768
-   ```
+2. Click the **"Dual Servers (6767, 6768)"** button (or manually type `127.0.0.1:6767, 127.0.0.1:6768` into the **DHCP server(s)** field).
+   > **Note on Loopback vs Real Physical LAN:** In a real physical LAN, DHCP clients broadcast to `255.255.255.255:67` and every server on the physical cable hears it. On a single computer (`127.0.0.1`), two servers cannot bind to the exact same UDP port without conflict, so Server 1 uses `6767` and Server 2 uses `6768`. Specifying both endpoints tells the client emulator to transmit the simulated broadcast to both server ports.
 3. Set **Host name** to `PC-Alpha`.
 
 ---
 
 ### Step 4: Execute the Handshake and Observe the Result
-1. Click **"Obtain IP (DORA)"**.
-2. **Observe Server 1:**
+1. Click **"Obtain IP (DORA)"**. *(If the client was already bound from a previous run, click "Release lease" first, or click "Yes" when prompted to release and re-bind).*
+2. **Observe the Client Window:**
+   - **Event log:**
+     ```
+     PC-Alpha -> DISCOVER ...
+     PC-Alpha <- OFFER yiaddr=192.168.1.100 from server 192.168.1.1 (127.0.0.1:6767)
+     PC-Alpha <- OFFER yiaddr=192.168.2.100 from server 192.168.2.1 (127.0.0.1:6768)
+     PC-Alpha: Received 2 competing offers [192.168.1.100 (server 192.168.1.1), 192.168.2.100 (server 192.168.2.1)] -> Selected 192.168.1.1 via Option 54
+     PC-Alpha -> REQUEST ... (Option 54: 192.168.1.1)
+     PC-Alpha <- ACK ...
+     PC-Alpha BOUND ip=192.168.1.100
+     ```
+   - **Packet Capture tab:** Both competing `DHCPOFFER` packets from Server 1 and Server 2 are captured and dissectable!
+3. **Observe Server 1 (The Chosen Server):**
    - Logs: `SERVER <- DISCOVER xid=0x...`
    - Logs: `SERVER -> OFFER yiaddr=192.168.1.100`
    - Logs: `SERVER <- REQUEST ...`
    - Logs: `SERVER -> ACK yiaddr=192.168.1.100`
    - In the **Leases** table: `PC-Alpha` is listed with `192.168.1.100` as active lease.
-3. **Observe Server 2 (The Unchosen Server):**
+4. **Observe Server 2 (The Unchosen Server):**
    - Logs: `SERVER <- DISCOVER xid=0x...`
    - Logs: `SERVER -> OFFER yiaddr=192.168.2.100`
    - Logs: `SERVER <- REQUEST ... Option 54: 192.168.1.1`

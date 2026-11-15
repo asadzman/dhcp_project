@@ -28,10 +28,11 @@ class ClientApp:
         # ---- settings ----
         sf = ttk.LabelFrame(root, text="Client settings")
         sf.pack(fill="x", padx=8, pady=6)
-        self.e_server = labeled_entry(sf, "DHCP server (host:port)", "127.0.0.1:%d" % SERVER_PORT, 0, 0, 22)
-        self.e_name = labeled_entry(sf, "Host name", "PC-1", 0, 2, 14)
-        self.e_mac = labeled_entry(sf, "MAC address", random_mac(), 1, 0, 22)
-        ttk.Button(sf, text="Random MAC", command=self._rand_mac).grid(row=1, column=2, sticky="w", padx=3)
+        self.e_server = labeled_entry(sf, "DHCP server(s)", "127.0.0.1:%d" % SERVER_PORT, 0, 0, 26)
+        ttk.Button(sf, text="Dual Servers (6767, 6768)", command=self._set_dual_servers).grid(row=0, column=2, padx=4)
+        self.e_name = labeled_entry(sf, "Host name", "PC-1", 0, 3, 12)
+        self.e_mac = labeled_entry(sf, "MAC address", random_mac(), 1, 0, 26)
+        ttk.Button(sf, text="Random MAC", command=self._rand_mac).grid(row=1, column=2, padx=4)
         self.auto = tk.BooleanVar(value=True)
         ttk.Checkbutton(sf, text="Auto-renew at T1", variable=self.auto, command=self._toggle_auto).grid(
             row=1, column=3, padx=6)
@@ -97,6 +98,10 @@ class ClientApp:
         root.protocol("WM_DELETE_WINDOW", self._close)
 
     # ---------- helpers ----------
+    def _set_dual_servers(self):
+        self.e_server.delete(0, "end")
+        self.e_server.insert(0, "127.0.0.1:6767, 127.0.0.1:6768")
+
     def _rand_mac(self):
         self.e_mac.delete(0, "end")
         self.e_mac.insert(0, random_mac())
@@ -140,7 +145,9 @@ class ClientApp:
         c = self._ensure_client()
         if c:
             if c.ip:
-                messagebox.showinfo("DHCP", "Already bound. Use Renew or Release.")
+                if messagebox.askyesno("DHCP", "Client is currently bound to %s.\n\nRelease lease and execute new DORA exchange?" % c.ip):
+                    c.release()
+                    c.obtain_async()
             else:
                 c.obtain_async()
 
