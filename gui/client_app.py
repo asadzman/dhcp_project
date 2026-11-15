@@ -1,4 +1,5 @@
 """DHCP CLIENT application: obtain / renew / release / decline an address and watch the exchange."""
+import time
 import tkinter as tk
 from tkinter import messagebox, ttk
 

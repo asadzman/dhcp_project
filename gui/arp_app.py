@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 import tkinter as tk
 from tkinter import messagebox, ttk
+from typing import Optional
 
 from arp import ArpEngine, ArpTable, DEFAULT_ARP_PORT
 from dhcp.capture import PacketCapture
