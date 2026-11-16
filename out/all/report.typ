@@ -28,7 +28,7 @@
   [ *Student Name:* Md Asaduz Zaman ], [ *Roll Number:* 002410501035 ],
   [ *Student Name:* Parthasarathi Das ], [ *Roll Number:* 302510501004 ],
   [ *Student Name:* Srimanta Kaibarta ], [ *Roll Number:* 302510501006 ],
-  [ *Student Name:* Bijay Verma ], [ *Roll Number:* 302510501005 ],
+  [ *Student Name:* Bijay Kumar Verma ], [ *Roll Number:* 302510501005 ],
 )
 #v(0.2em)
 #line(length: 100%, stroke: 0.8pt + luma(150))
@@ -36,7 +36,7 @@
 #grid(columns: (1.2fr, 1fr), row-gutter: 0.5em,
   [ *Submitted to:* Prof. Sarbani Roy ], [ *Class:* BCSE 3rd Year ],
   [ *Department:* Computer Science and Engineering ], [ *Group:* A2 ],
-  [ *Institution:* Jadavpur University ], [ *Submission Date:* November 2026 ],
+  [ *Institution:* Jadavpur University ], [ *Submission Date:* November 17, 2026 ],
 )
 #v(0.2em)
 #line(length: 100%, stroke: 0.8pt + luma(150))
